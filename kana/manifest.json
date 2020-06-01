@@ -1,0 +1,11 @@
+{
+    "name": "Kana",
+    "id": 20000,
+    "commands": [
+        {
+            "theme": "Kana",
+            "syntax": "Convert kana(&T;&L):T",
+            "threadSafe": true
+        }
+    ]
+}

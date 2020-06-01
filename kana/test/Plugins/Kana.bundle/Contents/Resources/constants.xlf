@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<xliff version="1.0" xmlns:d4="http://www.4d.com/d4-ns">
+    <header>
+        <note>Kana</note>
+    </header>
+    <group resname="themes">
+        <trans-unit id="" resname="6647111912974C4F9592558E1FD66345" translate="no">
+            <source>Kana Conversion Mode</source>
+        </trans-unit>
+    </group>
+    <group restype="x-4DK#" d4:groupName="6647111912974C4F9592558E1FD66345">
+        <trans-unit d4:value="0:L" id="6647111912974C4F9592558E1FD66345.1">
+            <source>LCMAP_FULLWIDTH</source>
+        </trans-unit>
+        <trans-unit d4:value="1:L" id="6647111912974C4F9592558E1FD66345.2">
+            <source>LCMAP_HALFWIDTH</source>
+        </trans-unit>
+        <trans-unit d4:value="0:L" id="6647111912974C4F9592558E1FD66345.3">
+            <source>LCMAP_HIRAGANA</source>
+        </trans-unit>
+        <trans-unit d4:value="2:L" id="6647111912974C4F9592558E1FD66345.4">
+            <source>LCMAP_KATAKANA</source>
+        </trans-unit>
+    </group>
+</xliff>

@@ -1,0 +1,25 @@
+{
+	"themes": [
+		{
+			"theme": "Kana Conversion Mode",
+			"constants": [
+				{
+					"name": "LCMAP_FULLWIDTH",
+					"value": "0:L"
+				},
+        {
+					"name": "LCMAP_HALFWIDTH",
+					"value": "1:L"
+				},
+        {
+					"name": "LCMAP_HIRAGANA",
+					"value": "0:L"
+				},
+        {
+					"name": "LCMAP_KATAKANA",
+					"value": "2:L"
+				}
+			]
+		}
+	]
+}
