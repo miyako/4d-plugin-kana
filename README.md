@@ -28,3 +28,7 @@ $KANA:=Convert kana ($KANA;LCMAP_KATAKANA | LCMAP_FULLWIDTH)
 Windowsでは[``LCMapStringEx``](https://docs.microsoft.com/en-us/windows/win32/api/winnls/nf-winnls-lcmapstringex)を使用しています。
 
 Macでは，[``CFStringTransform``](https://developer.apple.com/documentation/corefoundation/1542411-cfstringtransform?language=objc)を使用しています。デフォルトのルール（``kCFStringTransformHiraganaKatakana``）では「だーん」が「だあん」になるので，ICU式（``CFSTR("[:^Modifier Letter:];Hiragana-Katakana")``）でルールを記述しています。
+
+### Syntax
+
+[miyako.github.io](https://miyako.github.io/2020/06/01/4d-plugin-kana.html)
