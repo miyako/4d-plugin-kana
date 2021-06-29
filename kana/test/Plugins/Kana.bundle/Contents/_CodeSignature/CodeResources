@@ -8,7 +8,7 @@
 		<dict>
 			<key>hash</key>
 			<data>
-			JoTsjzgN7xf5GBwC9+Abh6UBS08=
+			k+OHWxnBfVmXxGdhMyODjhBHkFA=
 			</data>
 			<key>optional</key>
 			<true/>
@@ -17,15 +17,15 @@
 		<data>
 		V1gQGUZngFuJPH3yy8+2E+Is6lY=
 		</data>
+		<key>Resources/manifest.json</key>
+		<data>
+		aeVLGk8flSG8hoSP76SeLiQH0AY=
+		</data>
 	</dict>
 	<key>files2</key>
 	<dict>
 		<key>QuickLook/Thumbnail.png</key>
 		<dict>
-			<key>hash</key>
-			<data>
-			hC+U8EqvyIRM1lLakHLfvl4V9Tc=
-			</data>
 			<key>hash2</key>
 			<data>
 			nGfrvibB5KlzvZgF4Bra+l0HpRloxismgTLePnOwCdk=
@@ -33,58 +33,33 @@
 		</dict>
 		<key>Resources/English.lproj/InfoPlist.strings</key>
 		<dict>
-			<key>hash</key>
-			<data>
-			JoTsjzgN7xf5GBwC9+Abh6UBS08=
-			</data>
 			<key>hash2</key>
 			<data>
-			xsiq74Qwm3lPbEpVJg4BXuGlBel8/BK4pWokW6832N4=
+			Eh/gFl3053aNentekU8bcENKI1udz217/d1moI0tjeM=
 			</data>
 			<key>optional</key>
 			<true/>
 		</dict>
 		<key>Resources/constants.xlf</key>
 		<dict>
-			<key>hash</key>
-			<data>
-			V1gQGUZngFuJPH3yy8+2E+Is6lY=
-			</data>
 			<key>hash2</key>
 			<data>
 			ueU5tsyPlE1RV0bytayKLbi6ftTgIuGQiV9Zq2oGhW4=
 			</data>
 		</dict>
-		<key>Windows/Kana.4DX</key>
+		<key>Resources/manifest.json</key>
 		<dict>
-			<key>hash</key>
-			<data>
-			wL+gjdy0gevKTqf4QcVYfaiWMKI=
-			</data>
 			<key>hash2</key>
 			<data>
-			xhQw6wDe++ytY/i27fzOgXr1WBdHbvhC7LNBzOZ7Rgs=
+			ALYlxhc/23M/oalumesDawXsu6CHulVnGL9d8jBDvLY=
 			</data>
 		</dict>
 		<key>Windows64/Kana.4DX</key>
 		<dict>
-			<key>hash</key>
-			<data>
-			I6cEUNQYXo5qVgD9HxrXpeXxeCo=
-			</data>
 			<key>hash2</key>
 			<data>
 			Q//wRWvrCDTVHy7iZSa3qJeiL8We5fvskiidd4CJQ2M=
 			</data>
-		</dict>
-		<key>manifest.json</key>
-		<dict>
-			<key>cdhash</key>
-			<data>
-			AIYy1jsIKZ0Ss2Bw5D50OZFEm5A=
-			</data>
-			<key>requirement</key>
-			<string>identifier manifest and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = Y69CWUC25B</string>
 		</dict>
 	</dict>
 	<key>rules</key>
