@@ -1,0 +1,11 @@
+.DS_Store
+build/
+test/Data/Logs/
+test/Logs/
+test/userPreferences.*/
+test/Project/DerivedData/
+test/Plugins/Default/
+test/Plugins/Kana.bundle/Contents/MacOS/
+test/Plugins/Kana.bundle/Contents/_CodeSignature/
+/Kana.dmg
+/Kana.zip
