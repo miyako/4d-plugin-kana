@@ -57,6 +57,10 @@ void Convert_kana(PA_PluginParameters params) {
 
 	C_TEXT returnValue;
 
+    // the command returns a value: an exception that escaped to PluginMain's
+    // catch(...) would skip setReturn below, so catch it here instead
+    try {
+
 #if VERSIONWIN
     
     PA_Unistring *u = PA_GetStringParameter(params, 1);
@@ -75,14 +79,14 @@ void Convert_kana(PA_PluginParameters params) {
         dwMapFlags |= LCMAP_FULLWIDTH;
     }
     
-    if(u) {
+    if((u) && (u->fLength > 0)) {
         std::wstring str = std::wstring((const wchar_t *)u->fString, u->fLength);
         
 		int requestBufLen = LCMapStringEx(
 			LOCALE_NAME_USER_DEFAULT,
 			dwMapFlags,
 			str.c_str(),
-			str.length(),
+			(int)str.length(),
 			nullptr,
 			0,
 			nullptr,
@@ -90,62 +94,75 @@ void Convert_kana(PA_PluginParameters params) {
 			0
 		);
 
-        std::vector<wchar_t> buf(++requestBufLen);
-        
-		if (LCMapStringEx(
-			LOCALE_NAME_USER_DEFAULT,
-			dwMapFlags,
-			str.c_str(),
-			str.length(),
-			buf.data(),
-			buf.size(),
-			nullptr,
-			nullptr,
-			0
-		)) {
-			CUTF16String u16((const PA_Unichar *)buf.data());
-			returnValue.setUTF16String(&u16);
+		if (requestBufLen > 0) {
+
+			std::vector<wchar_t> buf(requestBufLen + 1);
+
+			// with an explicit source length the output is not NUL-terminated:
+			// use the returned length instead of scanning for a NUL
+			int len = LCMapStringEx(
+				LOCALE_NAME_USER_DEFAULT,
+				dwMapFlags,
+				str.c_str(),
+				(int)str.length(),
+				buf.data(),
+				requestBufLen,
+				nullptr,
+				nullptr,
+				0
+			);
+
+			if (len > 0) {
+				returnValue.setUTF16String((const PA_Unichar *)buf.data(), (uint32_t)len);
+			}
 		}
     }
 #else
     
-    PackagePtr pParams = (PackagePtr)params->fParameters;
-    
-    C_TEXT Param1;
-    Param1.fromParamAtIndex(pParams, 1);
-    NSString *sourceText = Param1.copyUTF16String();
-    
-    NSMutableString *outputText = [sourceText mutableCopy];
-    
-    if(mode & kana_convert_mode_katagana) {
-        CFStringTransform((CFMutableStringRef)outputText,
-                          NULL,
-                          CFSTR("[:^Modifier Letter:];Hiragana-Katakana"),
-                          false);
-    }else{
-        CFStringTransform((CFMutableStringRef)outputText,
-                          NULL,
-                          CFSTR("[:^Modifier Letter:];Katakana-Hiragana"),
-                          false);
+    @autoreleasepool {
+        
+        PackagePtr pParams = (PackagePtr)params->fParameters;
+        
+        C_TEXT Param1;
+        Param1.fromParamAtIndex(pParams, 1);
+        NSMutableString *outputText = Param1.copyUTF16MutableString();
+        
+        if(outputText) {
+            
+            if(mode & kana_convert_mode_katagana) {
+                CFStringTransform((CFMutableStringRef)outputText,
+                                  NULL,
+                                  CFSTR("[:^Modifier Letter:];Hiragana-Katakana"),
+                                  false);
+            }else{
+                CFStringTransform((CFMutableStringRef)outputText,
+                                  NULL,
+                                  CFSTR("[:^Modifier Letter:];Katakana-Hiragana"),
+                                  false);
+            }
+            
+            if(mode & kana_convert_width_half) {
+                CFStringTransform((CFMutableStringRef)outputText,
+                                  NULL,
+                                  kCFStringTransformFullwidthHalfwidth,
+                                  false);
+            }else{
+                CFStringTransform((CFMutableStringRef)outputText,
+                                  NULL,
+                                  kCFStringTransformFullwidthHalfwidth,
+                                  true);
+            }
+            
+            returnValue.setUTF16String(outputText);
+            [outputText release];
+        }
     }
-    
-    if(mode & kana_convert_width_half) {
-        CFStringTransform((CFMutableStringRef)outputText,
-                          NULL,
-                          kCFStringTransformFullwidthHalfwidth,
-                          false);
-    }else{
-        CFStringTransform((CFMutableStringRef)outputText,
-                          NULL,
-                          kCFStringTransformFullwidthHalfwidth,
-                          true);
-    }
-    
-    returnValue.setUTF16String(outputText);
-    [outputText release];
-    [sourceText release];
     
 #endif
+
+    } catch(...) {
+        returnValue.setUTF16String((const PA_Unichar *)L"", 0);
+    }
 
 	returnValue.setReturn(pResult);
 }
