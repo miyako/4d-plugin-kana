@@ -17,6 +17,111 @@ Convert Japanese text between Hiragana and Katakana, and between fullwidth and h
 
 [Releases](https://github.com/miyako/4d-plugin-kana/releases) · [Original article (Japanese)](https://miyako.github.io/2020/06/01/4d-plugin-kana.html)
 
+## Maintainer release workflow
+
+The two Actions workflows are separate, manual operations:
+
+1. Run **Bump version**, select the source branch in **Use workflow from**, and choose
+   `patch`, `minor`, or `major`. It validates source metadata and commits only the
+   version changes directly onto that branch. It does not create a tag, dispatch
+   Build, build binaries, or publish a release.
+2. Run **Build** (`release.yml`) on the resulting branch/commit. There are **zero
+   inputs** beyond GitHub's branch selector. Every job checks out the same immutable
+   dispatch SHA. The source version supplies `vX.Y.Z`, `Kana-X.Y.Z.zip`, and
+   `Kana-X.Y.Z.dmg`; a tag or free-form input never supplies the version.
+
+Bump requires a clean checkout and the selected branch's exact remote SHA, both
+before preparation and immediately before pushing. Its mandatory executable
+pre-push guard checks the server-advertised old SHA, literal new commit SHA,
+exact target, exactly one update, and one direct parent. Advance, rewind,
+deletion, and same-result races fail closed. Pushes are non-force and disable
+following tags even if Git is configured otherwise. Generated bump commits include
+the Copilot App co-author trailer and must change only the three source metadata
+paths listed below.
+
+Build retains Windows x64 (`Release`, VS2022/v143 and Windows SDK 10.0) followed by
+macOS (`Default`, arm64 + x86_64, deployment target 11.5). It preserves the native
+project, dependencies, Cocoa framework, resource copying, `windows-binaries`
+artifact, committed bundle resources, and Windows payload during Mac cleanup.
+It requires fresh exact output paths, universal architecture and source bundle
+metadata verification, Developer ID signing and strict signature verification,
+successful **Accepted** notarization of both ZIP and DMG, and DMG stapling.
+Certificate/keychain/notary secret names and the `notarytool-profile` are unchanged.
+There is no new branch restriction; neither original workflow restricted branches.
+Do not use a production Build run merely to validate workflow changes.
+
+Publication is serialized repository-wide across branches, without cancellation.
+Before building and again **after all native/sign/notary/staple gates**, authenticated
+requests check the exact remote tag and every releases page, including drafts.
+Authentication failures, 404s, network errors, malformed data, and later-page
+failures are errors, never evidence of absence. Publication then performs three
+create-only operations: `POST git/refs` at the selected SHA (and remote verification),
+`POST releases` for a new public, non-prerelease release, and asset POSTs to that
+new release ID. The original release title remains the tag; the body remains empty,
+without generated notes. Existing tags/releases/assets are never reused, updated,
+clobbered, deleted, retried, or rolled back, even for the same SHA.
+
+**Partial publication recovery:** a failed request may already have succeeded
+remotely. Inspect the Actions log, exact tag SHA, draft/public releases, release
+IDs, and uploaded asset names/sizes manually before taking any action. Tags,
+releases, and earlier uploaded assets are retained on every later failure. A
+rerun intentionally refuses any occupied version. A maintainer must separately
+decide how to complete or remove partial state, or bump to a new version and run
+Build; these workflows never perform recovery automatically.
+
+### Source-version authority and migration evidence
+
+`master` was verified through both the repository API and symbolic remote HEAD.
+The original workflows were introduced in
+[`78355b59`](https://github.com/miyako/4d-plugin-kana/commit/78355b59fa3a9bad46f136b98d7d8c35d3fb8d5a).
+Full rename-follow history contains no earlier bump workflow or later authority
+change. Its **header explicitly promises coordinated**
+`MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` **and**
+`CFBundleShortVersionString` / `CFBundleVersion`. That promise takes precedence
+over the buggy marketing-first/current-only-fallback body, which only updated the
+selected Xcode key and skipped the plist when it contained a reference. This is
+not an inference from initially equal values.
+
+The actual source inputs are:
+
+| Source path | Contract |
+|---|---|
+| `Kana.xcodeproj/project.pbxproj` | Six marketing settings and three current-project settings; all resolve to one strict `X.Y.Z`. The current settings may reference marketing, never themselves or an unknown setting. |
+| `Info.plist` | The actual `INFOPLIST_FILE` for all three target configurations. Short version is `$(MARKETING_VERSION)`; optional `CFBundleVersion` is absent and stays absent. Valid references remain byte-for-byte unchanged; present literals co-bump. |
+| `English.lproj/InfoPlist.strings` | The actual localized resource input. Both display strings co-bump; the original CR-only endings and `Copyright 2021 miyako.` remain unchanged. Quoted/unquoted and inline assignments are tokenized, with duplicate keys rejected. |
+
+All these inputs already agree on **1.1.0**, so this migration performs **no
+intake increment and no drift repair**. The existing remote `v1.1.0` is left
+untouched; Build on this unchanged version intentionally refuses publication.
+Use Bump first when preparing a subsequent release. Future Bumps validate all inputs before
+writing anything and preserve BOM, per-line CR/CRLF/LF endings (including mixed
+endings), modes, absent optional fields, references, copyright, and unrelated
+bytes. Prebuilt bundle plists/localizations/binaries, dependencies, 4D data/schema
+and counters, manifests, and localization/schema versions are not version authority.
+
+The helpers and regression suites were adapted from the full, exact pinned prior
+art, not from platform assumptions in comments:
+[encoding-detection at `c42ca565`](https://github.com/miyako/4d-plugin-native-encoding-detection/tree/c42ca565857f674bde5ea6ed3435c87375eda4a7)
+(coordinated metadata, strict localized tokenizer, guard and fail-closed cleanup),
+[codec at `72c67486`](https://github.com/miyako/4d-plugin-codec/tree/72c67486d8f8ca88c1d72935137502b3d7ac4465)
+(actual copied plist inputs),
+[common-string-algorithm at `2606a682`](https://github.com/miyako/4d-plugin-common-string-algorithm/tree/2606a68201866ec9fcbb38b51462d79215f504ef)
+and [corrected window-button at `3f14facb`](https://github.com/miyako/4d-plugin-window-button/tree/3f14facb9aaaaff0e22eeb8e07531163680c3a8a)
+(independent-build counterexamples and reference safety). Their independent-build
+policy and codec's second plist do not apply to Kana's explicit coordinated
+header and single copied source plist.
+
+Local regression checks (no real native/signing/notary/4D execution):
+
+```sh
+actionlint
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s .github/tests -v
+```
+
+The suites use disposable source copies, real bare-Git race fixtures, mocked
+GitHub API responses, closed-PATH native command stubs, and PowerShell path tests.
+They also support running unchanged in a disposable copy after a source bump.
+
 ---
 
 ## Requirements & platform notes

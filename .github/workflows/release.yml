@@ -3,10 +3,8 @@
 # .bundle, codesigns + notarizes the mac binary, and publishes a GitHub
 # Release with the zip and dmg attached.
 #
-# Trigger: push a tag matching v*.*.* by hand. A tag pushed by
-# bump-version.yml with GITHUB_TOKEN does NOT start this workflow: after a
-# bump, run `gh workflow run release.yml -f tag=vX.Y.Z`.
-# You can also run it manually against an existing tag with workflow_dispatch.
+# Build is manual on the selected immutable source commit, with no inputs.
+# Source metadata determines the new tag and asset names; publication is create-only.
 #
 # PORTABILITY: edit only the env block below. Everything else is derived.
 # MACOS_DEPLOYMENT_TARGET must equal MACOSX_DEPLOYMENT_TARGET in the pbxproj.
@@ -15,23 +13,16 @@
 #   test/Plugins/<Product>.bundle/Contents/Windows64/<Product>.4DX
 #   test/Plugins/<Product>.bundle/Contents/Resources/manifest.json
 #
-# The macOS job never deletes the bundle: only the plugin binary and the
-# signature are rebuilt. Anything else committed in the bundle (Windows64/,
+# The macOS job never deletes the bundle: only the plugin binary, generated
+# version metadata and signature are rebuilt. Other bundle content (Windows64/,
 # runtime dylibs in MacOS/, QuickLook/, ...) ships as committed. The runner's
 # file system is case-insensitive, so never `rm -rf .../plugins` (lower case):
 # that deletes .../Plugins too.
 
-name: Build & Release
+name: Build
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
   workflow_dispatch:
-    inputs:
-      tag:
-        description: Existing tag to build (e.g. v2.3.0)
-        required: true
 
 permissions:
   contents: write
@@ -45,7 +36,7 @@ env:
   # ---------------------------------------------
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-publication
   cancel-in-progress: false
 
 jobs:
@@ -56,19 +47,17 @@ jobs:
       tag: ${{ steps.set.outputs.tag }}
       version: ${{ steps.set.outputs.version }}
     steps:
-      - id: set
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: validate source and publication availability
+        id: set
         env:
-          RAW_TAG: ${{ inputs.tag || github.ref_name }}
+          SELECTED_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # trim whitespace from a hand-typed workflow_dispatch input (" v1.0.1")
-          TAG="$(echo "$RAW_TAG" | xargs)"
-          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Tag '${RAW_TAG}' is not of the form vX.Y.Z"
-            exit 1
-          fi
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          python3 .github/scripts/release.py preflight --sha "$SELECTED_SHA"
 
   build-windows:
     name: Build Windows (x64)
@@ -77,7 +66,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.version.outputs.tag }}
+          ref: ${{ github.sha }}
 
       - name: setup MSBuild
         uses: microsoft/setup-msbuild@v2
@@ -87,9 +76,16 @@ jobs:
         run: |
           $product = "${{ env.PRODUCT_NAME }}"
           $base = "${{ env.BASE_DIR }}"
-          Remove-Item -Force -ErrorAction SilentlyContinue "$base/Plugins/$product.bundle/Contents/Windows64/$product.4DX"
-          Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "$base/Plugins/Default"
-          Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "Objs"
+          $ErrorActionPreference = 'Stop'
+          if (Test-Path -LiteralPath "$base/Plugins/$product.bundle/Contents/Windows64/$product.4DX" -ErrorAction Stop) {
+            Remove-Item -LiteralPath "$base/Plugins/$product.bundle/Contents/Windows64/$product.4DX" -Force -ErrorAction Stop
+          }
+          if (Test-Path -LiteralPath "$base/Plugins/Default" -ErrorAction Stop) {
+            Remove-Item -LiteralPath "$base/Plugins/Default" -Recurse -Force -ErrorAction Stop
+          }
+          if (Test-Path -LiteralPath "Objs" -ErrorAction Stop) {
+            Remove-Item -LiteralPath "Objs" -Recurse -Force -ErrorAction Stop
+          }
 
       # GitHub-hosted windows-latest ships VS2022 (v143 toolset) but not the
       # legacy v140 toolset the project may be pinned to, so we override it on
@@ -105,21 +101,22 @@ jobs:
         run: |
           $product = "${{ env.PRODUCT_NAME }}"
           $base = "${{ env.BASE_DIR }}"
+          $ErrorActionPreference = 'Stop'
           $canonicalDir = "$base/Plugins/$product.bundle/Contents/Windows64"
           New-Item -ItemType Directory -Force -Path $canonicalDir | Out-Null
 
-          # msbuild may write to plugins\...\contents\windows64 (lower case, per the vcxproj)
-          $found = Get-ChildItem -Recurse -Filter "$product.4DX" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like "*Plugins*" } | Select-Object -First 1
-          if (-not $found) {
-            Get-ChildItem -Recurse -Filter "*.4DX" | ForEach-Object { Write-Host $_.FullName }
-            Write-Error "Windows binary $product.4DX not found after build"
-            exit 1
+          # Exact Release|x64 OutDir in Kana.vcxproj, not a recursive first match.
+          $source = "$base/plugins/$product.bundle/contents/windows64/$product.4DX"
+          if (-not (Test-Path -LiteralPath $source -PathType Leaf -ErrorAction Stop)) {
+            throw "Windows binary missing at exact MSBuild output: $source"
           }
-          Write-Host "Found at: $($found.FullName)"
 
           $destination = Join-Path $canonicalDir "$product.4DX"
-          $sourceResolved = (Resolve-Path $found.FullName).Path
-          $destResolved = (Resolve-Path $destination -ErrorAction SilentlyContinue).Path
+          $sourceResolved = (Resolve-Path -LiteralPath $source).Path
+          $destResolved = $null
+          if (Test-Path -LiteralPath $destination -ErrorAction Stop) {
+            $destResolved = (Resolve-Path -LiteralPath $destination).Path
+          }
 
           if ($destResolved -and ($sourceResolved -ieq $destResolved)) {
             # Windows is case-insensitive: MSBuild's OutDir (lowercase, per
@@ -128,7 +125,7 @@ jobs:
             # "overwrite" a file with itself - there's nothing left to do.
             Write-Host "Already at canonical location (case-insensitive match) - skipping copy."
           } else {
-            Copy-Item $found.FullName $destination -Force
+            Copy-Item -LiteralPath $source $destination -Force
           }
           Get-ChildItem $canonicalDir
 
@@ -146,7 +143,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.version.outputs.tag }}
+          ref: ${{ github.sha }}
 
       - name: check prebuilt libraries
         run: |
@@ -154,6 +151,7 @@ jobs:
           # every a/... or lib/... file the Xcode project references must be
           # committed (a gitignored a/* makes the link fail with "no such file")
           MISSING=0
+          # shellcheck disable=SC2013
           for f in $(grep -o 'path = "\{0,1\}\(a\|lib\)/[^";]*' "${{ env.PRODUCT_NAME }}.xcodeproj/project.pbxproj" | sed 's/^path = "\{0,1\}//' | sort -u); do
             if [ ! -e "$f" ]; then
               echo "::error::Missing prebuilt library $f"
@@ -217,6 +215,9 @@ jobs:
           # at verify instead of shipping a stale committed binary
           echo "Cleaning stale outputs to avoid /Default/ vs / bug"
           rm -f "${BUNDLE:?}/Contents/MacOS/${PRODUCT:?}"
+          # These are generated by Xcode too; committed copies cannot prove freshness.
+          rm -f "${BUNDLE:?}/Contents/Info.plist"
+          rm -f "${BUNDLE:?}/Contents/Resources/English.lproj/InfoPlist.strings"
           rm -rf "${BUNDLE:?}/Contents/_CodeSignature"
           rm -rf "${PLUGINS_DIR:?}/Default"
           rm -rf "${PLUGINS_DIR:?}/${PRODUCT:?}.build"
@@ -252,21 +253,21 @@ jobs:
           echo "Timestamp check (must be recent):"
           ls -lT "$BIN" || ls -l --time-style=full "$BIN"
 
-          # separate lines: under set -e a failure left of && is ignored
-          lipo -info "$BIN"
-          lipo -info "$BIN" | grep -q "arm64"
-          lipo -info "$BIN" | grep -q "x86_64"
-          if lipo -info "$BIN" | grep -q "i386"; then
-            echo "::error::i386 slice found - this is a stale binary, not the fresh build"
-            exit 1
-          fi
+          verify_architectures() {
+            local ARCHITECTURES
+            lipo -info "$1"
+            ARCHITECTURES=$(lipo -archs "$1")
+            case "$ARCHITECTURES" in
+              "arm64 x86_64"|"x86_64 arm64") ;;
+              *) echo "::error::Expected exactly arm64 and x86_64 in $1, got $ARCHITECTURES"; return 1 ;;
+            esac
+          }
+          verify_architectures "$BIN"
 
           # runtime dylibs committed next to the binary must be universal too
           for lib in "${CONTENTS}"/MacOS/*.dylib; do
             [ -e "$lib" ] || continue
-            lipo -info "$lib"
-            lipo -info "$lib" | grep -q "arm64"
-            lipo -info "$lib" | grep -q "x86_64"
+            verify_architectures "$lib"
           done
 
           if [ ! -f "${CONTENTS}/Resources/manifest.json" ]; then
@@ -277,6 +278,7 @@ jobs:
             echo "::error::constants.xlf is not copied to ${CONTENTS}/Resources"
             exit 1
           fi
+          python3 .github/scripts/source_version.py --verify-bundle "${BASE}/Plugins/${PRODUCT}.bundle"
 
       - name: merge Windows binaries into the bundle
         run: |
@@ -290,9 +292,9 @@ jobs:
           echo "winbuild contents:"
           ls -R winbuild || true
 
-          SRC=$(find winbuild -name "${PRODUCT}.4DX" -type f | head -1)
-          if [ -z "$SRC" ]; then
-            echo "::error::Windows binary ${PRODUCT}.4DX not found in winbuild/"
+          SRC="winbuild/${PRODUCT}.4DX"
+          if [ ! -s "$SRC" ]; then
+            echo "::error::Windows binary missing at exact artifact path $SRC"
             exit 1
           fi
 
@@ -338,10 +340,10 @@ jobs:
           notarize() {
             local OUT ID STATUS
             OUT=$(xcrun notarytool submit "$1" --keychain-profile "notarytool-profile" --keychain "$KEYCHAIN_PATH" \
-              --wait --output-format json) || true
+              --wait --output-format json)
             echo "$OUT"
-            ID=$(plutil -extract id raw -o - - <<< "$OUT" 2>/dev/null || true)
-            STATUS=$(plutil -extract status raw -o - - <<< "$OUT" 2>/dev/null || true)
+            ID=$(plutil -extract id raw -o - - <<< "$OUT")
+            STATUS=$(plutil -extract status raw -o - - <<< "$OUT")
             if [ "$STATUS" != "Accepted" ]; then
               echo "::error::Notarization of $1 returned '${STATUS:-no status}'"
               if [ -n "$ID" ]; then
@@ -360,10 +362,9 @@ jobs:
           ls -lh "$ZIP_PATH" "$DMG_PATH"
 
       - name: create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.version.outputs.tag }}
-          name: ${{ needs.version.outputs.tag }}
-          files: |
-            ${{ env.ZIP_PATH }}
-            ${{ env.DMG_PATH }}
+        env:
+          SELECTED_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/release.py publish --sha "$SELECTED_SHA" "$ZIP_PATH" "$DMG_PATH"
